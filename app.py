@@ -1,45 +1,47 @@
-from flask import Flask, render_template_string, request, jsonify
-import keras
+import os
 import numpy as np
+from flask import Flask, render_template_string, request, jsonify
+
+# Force TensorFlow / Keras to use CPU only
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+import keras
 
 app = Flask(__name__)
 
-# Load the Keras ANN model saved in the .pkl file[cite: 1]
+# Load the saved Keras ANN model[cite: 1]
 MODEL_PATH = "ANN.pkl"
 model = keras.models.load_model(MODEL_PATH)
 
-# Embedded HTML/CSS/JS Interface
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ANN Prediction Interface</title>
+    <title>Churn Prediction System</title>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background: #f0f2f5; margin: 0; padding: 40px 20px; display: flex; justify-content: center; }
-        .card { background: #ffffff; padding: 30px; border-radius: 12px; max-width: 650px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-        h2 { margin-top: 0; color: #1a1a1a; border-bottom: 2px solid #eef2f5; padding-bottom: 12px; }
-        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 15px; margin-top: 20px; }
+        body { background: #0f172a; color: #f8fafc; margin: 0; padding: 40px 20px; display: flex; justify-content: center; min-height: 100vh; align-items: center; }
+        .card { background: #1e293b; padding: 32px; border-radius: 16px; max-width: 650px; width: 100%; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); border: 1px solid #334155; }
+        h2 { margin-top: 0; color: #f1f5f9; border-bottom: 2px solid #334155; padding-bottom: 12px; font-size: 24px; text-align: center; }
+        .grid-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 16px; margin-top: 24px; }
         .input-group { display: flex; flex-direction: column; }
-        .input-group label { font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
-        .input-group input { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; outline: none; transition: border-color 0.2s; }
-        .input-group input:focus { border-color: #007bff; }
-        button { margin-top: 25px; width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-        button:hover { background: #0056b3; }
-        .result-box { margin-top: 25px; padding: 15px; border-radius: 8px; display: none; text-align: center; font-size: 16px; font-weight: bold; }
-        .success { background: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
-        .error { background: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; }
+        .input-group label { font-size: 12px; font-weight: 600; color: #94a3b8; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .input-group input { padding: 10px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; font-size: 14px; color: #f8fafc; outline: none; transition: border-color 0.2s; }
+        .input-group input:focus { border-color: #38bdf8; }
+        button { margin-top: 28px; width: 100%; padding: 14px; background: #2563eb; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #1d4ed8; }
+        .result-box { margin-top: 24px; padding: 16px; border-radius: 8px; display: none; text-align: center; font-size: 16px; font-weight: 600; }
+        .success { background: #064e3b; color: #6ee7b7; border: 1px solid #047857; }
+        .error { background: #7f1d1d; color: #fca5a5; border: 1px solid #b91c1c; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>ANN Model Predictor</h2>
+    <h2>Customer Churn Predictor</h2>
     <form id="predictionForm">
         <div class="grid-container">
-            <!-- Dynamically generate 10 feature input fields required by the model -->
             <script>
                 for (let i = 1; i <= 10; i++) {
                     document.write(`
@@ -51,7 +53,7 @@ HTML_TEMPLATE = """
                 }
             </script>
         </div>
-        <button type="submit">Predict Result</button>
+        <button type="submit">Predict Churn</button>
     </form>
 
     <div id="resultBox" class="result-box"></div>
@@ -69,7 +71,7 @@ HTML_TEMPLATE = """
         const resultBox = document.getElementById("resultBox");
         resultBox.style.display = "block";
         resultBox.className = "result-box";
-        resultBox.innerHTML = "Processing prediction...";
+        resultBox.innerHTML = "Processing neural network output...";
 
         try {
             const response = await fetch("/predict", {
@@ -82,14 +84,15 @@ HTML_TEMPLATE = """
 
             if (response.ok) {
                 resultBox.className = "result-box success";
-                resultBox.innerHTML = `Predicted Class: <b>${data.predicted_class}</b><br><small>Confidence Probability: ${(data.probability * 100).toFixed(2)}%</small>`;
+                const label = data.predicted_class === 1 ? "Likely to Churn" : "Unlikely to Churn";
+                resultBox.innerHTML = `Prediction: <b>${label} (Class ${data.predicted_class})</b><br><small>Confidence: ${(data.probability * 100).toFixed(2)}%</small>`;
             } else {
                 resultBox.className = "result-box error";
                 resultBox.innerHTML = `Error: ${data.error}`;
             }
         } catch (err) {
             resultBox.className = "result-box error";
-            resultBox.innerHTML = "An error occurred connecting to the server.";
+            resultBox.innerHTML = "Unable to communicate with the server.";
         }
     });
 </script>
@@ -106,19 +109,13 @@ def index():
 def predict():
     try:
         data = request.get_json()
-        
-        # Validate 10 input features
         features = data.get("features", [])
-        if len(features) != 10:
-            return jsonify({"error": f"Expected 10 input values, received {len(features)}"}), 400
-
-        # Convert input array to shape (1, 10)
-        input_data = np.array([features], dtype=np.float32)
-
-        # Run model inference[cite: 1]
-        prediction = model.predict(input_data)[0][0]
         
-        # Classification threshold
+        if len(features) != 10:
+            return jsonify({"error": f"Expected 10 inputs, received {len(features)}"}), 400
+
+        input_data = np.array([features], dtype=np.float32)
+        prediction = model.predict(input_data)[0][0]
         class_result = 1 if prediction >= 0.5 else 0
 
         return jsonify({
@@ -130,4 +127,6 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Fetch port dynamically for Render hosting deployment
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
