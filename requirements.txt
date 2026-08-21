@@ -1,4 +1,5 @@
-flask
-keras
-tensorflow
+Flask
+gunicorn
 numpy
+tensorflow-cpu
+keras
